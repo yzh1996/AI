@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(if not exist \"E:\\\\yzh\\\\workspace\\\\code\\\\ai\\\\langgraph_test\\\\templates\" mkdir \"E:\\\\yzh\\\\workspace\\\\code\\\\ai\\\\langgraph_test\\\\templates\")",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)"
+    ]
+  }
+}

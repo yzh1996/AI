@@ -1,0 +1,21 @@
+# Core dependencies for LangGraph agent
+langchain-core==1.0.3
+langchain-openai==1.0.2
+langgraph==1.0.2
+openai==2.7.1
+pydantic==2.11.10
+
+# Database connectivity
+PyMySQL==1.1.2
+SQLAlchemy==2.0.44
+pandas==2.3.3
+mysql-connector-python==9.5.0
+
+# Web application (Flask for view analyzer)
+Flask==3.1.2
+
+# Visualization (for view dependency graphs)
+graphviz==0.21
+
+# Environment configuration
+python-dotenv==1.2.1

@@ -1,0 +1,36 @@
+=== live_base_view ===
+id	bigint
+live_create_time	datetime
+anchor_id	bigint
+cover_url	varchar(1048576)
+finish_time	int
+is_show	boolean
+title	varchar(1048576)
+top_user	bigint
+total_user	bigint
+contain_cart	int
+follow_count	bigint
+like_count	bigint
+windmill_id	bigint
+windmill_title	varchar(1048576)
+windmill_type	varchar(1048576)
+windmill_url	varchar(1048576)
+windmill_create_time	datetime
+update_time	int
+exposed_num	bigint
+city	varchar(1048576)
+province	varchar(1048576)
+user_follow_count	bigint
+user_name	varchar(1048576)
+user_head_logo	varchar(1048576)
+user_gender	varchar(1048576)
+first_tag_name	varchar(1048576)
+second_tag_name	varchar(1048576)
+product_num	bigint
+sales_volume	bigint
+saleroom	decimal(20,0)
+promotion_source	varchar(1048576)
+first_cid	varchar(1048576)
+second_cid	varchar(1048576)
+other	decimal(10,2)
+
