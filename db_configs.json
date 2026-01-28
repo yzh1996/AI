@@ -1,0 +1,18 @@
+{
+  "version": "1.0",
+  "configs": [
+    {
+      "id": "b3752f18-12da-4617-af5e-eea838cda66c",
+      "name": "starrock",
+      "driver": "starrocks",
+      "host": "192.168.8.33",
+      "port": 2030,
+      "database": "donggua",
+      "catalog": null,
+      "user": "root",
+      "password": "gAAAAABpefwSwgvMZ9YLWEJ6cBUz_rAiA2gEgSNPRrdYB3MLm2KE4GJOPqOpkgzk05Z0lSM2iLAWw11K-t4cvsbv-3EnOSUA-w==",
+      "created_at": "2026-01-28T20:07:46.323560",
+      "last_used": "2026-01-28T21:05:19.777282"
+    }
+  ]
+}

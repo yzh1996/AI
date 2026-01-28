@@ -409,24 +409,10 @@
             <p style="margin: 0 0 20px 0; opacity: 0.9; text-align: center;">输入表或视图名称，点击展开查看依赖关系树，点击节点查看表结构详情。支持多数据库配置、实时检测和依赖关系导出</p>
 
             <div style="display: flex; justify-content: center; gap: 10px; align-items: center;">
-                <!-- 数据库选择器 -->
-                <div style="position: relative;">
-                    <div onclick="toggleDatabaseSelector()" style="display: flex; align-items: center; gap: 8px; padding: 10px 15px; background: rgba(255,255,255,0.2); border-radius: 8px; cursor: pointer; min-width: 200px; transition: all 0.3s;">
-                        <div id="statusDot" style="width: 10px; height: 10px; border-radius: 50%; background: #ffc107;"></div>
-                        <span id="statusText" style="font-size: 14px; font-weight: bold; flex: 1;">未配置</span>
-                        <span style="font-size: 12px;">▼</span>
-                    </div>
-                    <!-- 下拉列表 -->
-                    <div id="dbDropdown" style="display: none; position: absolute; top: 100%; left: 0; margin-top: 5px; background: white; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 200px; z-index: 1000; max-height: 300px; overflow-y: auto;">
-                        <div id="dbDropdownList" style="padding: 5px;">
-                            <!-- 动态加载数据库列表 -->
-                        </div>
-                        <div style="border-top: 1px solid #e0e0e0; padding: 10px;">
-                            <button onclick="openConfigModal(); toggleDatabaseSelector();" style="width: 100%; padding: 8px; background: #667eea; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">
-                                + 新建配置
-                            </button>
-                        </div>
-                    </div>
+                <!-- 连接状态 -->
+                <div style="display: flex; align-items: center; gap: 8px; padding: 10px 15px; background: rgba(255,255,255,0.2); border-radius: 8px;">
+                    <div id="statusDot" style="width: 10px; height: 10px; border-radius: 50%; background: #ffc107;"></div>
+                    <span id="statusText" style="font-size: 14px; font-weight: bold;">未配置</span>
                 </div>
 
                 <!-- 配置按钮 -->
@@ -455,7 +441,7 @@
                 <div class="panel-content">
                     <div class="search-box">
                         <input type="text" id="viewNameInput" placeholder="请输入表或视图名称，例如：live_base_view 或 live_base" />
-                        <button onclick="analyzeView()">🔍</button>
+                        <button onclick="analyzeView()">分析</button>
                     </div>
 
                     <div id="errorMessage" class="error-message"></div>
@@ -917,10 +903,6 @@
                         <option value="starrocks" selected>StarRocks</option>
                         <option value="doris">Doris</option>
                         <option value="postgresql">PostgreSQL</option>
-                        <option value="hive">Hive</option>
-                        <option value="paimon">Paimon</option>
-                        <option value="hudi">Hudi</option>
-                        <option value="iceberg">Iceberg</option>
                     </select>
                 </div>
 
@@ -1325,98 +1307,9 @@
             if (typeof loadConfigs === 'function') {
                 loadConfigs();
             }
-            loadDatabaseList();
         });
 
-        // ==================== 数据库选择器功能 ====================
-        let dbDropdownOpen = false;
-
-        // 切换数据库选择器
-        function toggleDatabaseSelector() {
-            const dropdown = document.getElementById('dbDropdown');
-            dbDropdownOpen = !dbDropdownOpen;
-            if (dbDropdownOpen) {
-                loadDatabaseList();
-                dropdown.style.display = 'block';
-            } else {
-                dropdown.style.display = 'none';
-            }
-        }
-
-        // 加载数据库列表
-        async function loadDatabaseList() {
-            try {
-                const response = await fetch('/api/configs');
-                const data = await response.json();
-
-                if (data.success) {
-                    const listDiv = document.getElementById('dbDropdownList');
-                    const activeConfigId = data.active_config_id;
-
-                    if (data.configs.length === 0) {
-                        listDiv.innerHTML = '<div style="padding: 10px; text-align: center; color: #999;">暂无配置</div>';
-                        return;
-                    }
-
-                    listDiv.innerHTML = data.configs.map(config => `
-                        <div onclick="switchDatabase('${config.id}')"
-                             style="padding: 10px; cursor: pointer; border-radius: 6px; transition: background 0.2s; display: flex; align-items: center; justify-content: space-between; ${config.id === activeConfigId ? 'background: #e3f2fd;' : ''}">
-                            <div>
-                                <div style="font-weight: bold; color: #333;">${config.name}</div>
-                                <div style="font-size: 12px; color: #666;">${config.driver} - ${config.host}:${config.port}</div>
-                            </div>
-                            ${config.id === activeConfigId ? '<span style="color: #1976d2; font-weight: bold;">✓</span>' : ''}
-                        </div>
-                    `).join('');
-                }
-            } catch (error) {
-                console.error('加载数据库列表失败:', error);
-            }
-        }
-
-        // 切换数据库
-        async function switchDatabase(configId) {
-            try {
-                // 停止自动刷新
-                if (autoRefreshInterval) {
-                    clearInterval(autoRefreshInterval);
-                    autoRefreshInterval = null;
-                }
-
-                // 重置自动刷新复选框
-                const toggle = document.getElementById('autoRefreshToggle');
-                if (toggle) {
-                    toggle.checked = false;
-                }
-
-                const response = await fetch(`/api/configs/${configId}/activate`, {
-                    method: 'POST'
-                });
-
-                const result = await response.json();
-
-                if (result.success) {
-                    toggleDatabaseSelector();
-                    await checkConnectionStatus();
-                    showToast('数据库已切换', 'success');
-                } else {
-                    showToast('切换失败: ' + result.error, 'error');
-                }
-            } catch (error) {
-                showToast('切换失败: ' + error.message, 'error');
-            }
-        }
-
-        // 点击外部关闭下拉菜单
-        document.addEventListener('click', function(e) {
-            const dropdown = document.getElementById('dbDropdown');
-            const selector = dropdown?.parentElement;
-            if (dbDropdownOpen && selector && !selector.contains(e.target)) {
-                toggleDatabaseSelector();
-            }
-        });
-
-
+    
 </script>
 
 
@@ -1773,31 +1666,21 @@
                 return;
             }
 
-            listEl.innerHTML = configs.map(config => {
-                const isActive = config.id === activeConfigId;
-                const isSelected = config.id === currentConfigId;
-
-                return `
-                    <div onclick="selectConfig('${config.id}')"
-                         class="config-item"
-                         data-config-id="${config.id}"
-                         style="padding: 15px; margin-bottom: 10px; border-radius: 8px; cursor: pointer;
-                                background: ${isSelected ? '#e8eaf6' : '#f9f9f9'};
-                                border: 2px solid ${isSelected ? '#667eea' : 'transparent'};
-                                transition: all 0.3s;">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <div>
-                                <div style="font-weight: bold; color: #333; margin-bottom: 5px;">
-                                    ${isActive ? '<span style="color: #4caf50;">✓</span> ' : ''}${config.name}
-                                </div>
-                                <div style="font-size: 12px; color: #666;">
-                                    ${config.driver} - ${config.host}:${config.port}
-                                </div>
+            listEl.innerHTML = configs.map(config => `
+                <div onclick="selectConfig('${config.id}')"
+                     style="padding: 15px; margin-bottom: 10px; border-radius: 8px; cursor: pointer; background: ${config.id === activeConfigId ? '#e8eaf6' : '#f9f9f9'}; border: 2px solid ${config.id === activeConfigId ? '#667eea' : 'transparent'};">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <div style="font-weight: bold; color: #333; margin-bottom: 5px;">
+                                ${config.id === activeConfigId ? '✓ ' : ''}${config.name}
+                            </div>
+                            <div style="font-size: 12px; color: #666;">
+                                ${config.driver} - ${config.host}:${config.port}
                             </div>
                         </div>
                     </div>
-                `;
-            }).join('');
+                </div>
+            `).join('');
         }
 
         // 选择配置
@@ -1806,11 +1689,6 @@
             const config = allConfigs.find(c => c.id === configId);
 
             if (!config) return;
-
-            // 更新列表选中状态
-            const response = await fetch('/api/configs');
-            const data = await response.json();
-            renderConfigList(allConfigs, data.active_config_id);
 
             // 渲染配置表单
             document.getElementById('configForm').innerHTML = `
@@ -1830,10 +1708,6 @@
                         <option value="starrocks" ${config.driver === 'starrocks' ? 'selected' : ''}>StarRocks</option>
                         <option value="doris" ${config.driver === 'doris' ? 'selected' : ''}>Doris</option>
                         <option value="postgresql" ${config.driver === 'postgresql' ? 'selected' : ''}>PostgreSQL</option>
-                        <option value="hive" ${config.driver === 'hive' ? 'selected' : ''}>Hive</option>
-                        <option value="paimon" ${config.driver === 'paimon' ? 'selected' : ''}>Paimon</option>
-                        <option value="hudi" ${config.driver === 'hudi' ? 'selected' : ''}>Hudi</option>
-                        <option value="iceberg" ${config.driver === 'iceberg' ? 'selected' : ''}>Iceberg</option>
                     </select>
                 </div>
 
@@ -1932,10 +1806,6 @@
                         <option value="starrocks" selected>StarRocks</option>
                         <option value="doris">Doris</option>
                         <option value="postgresql">PostgreSQL</option>
-                        <option value="hive">Hive</option>
-                        <option value="paimon">Paimon</option>
-                        <option value="hudi">Hudi</option>
-                        <option value="iceberg">Iceberg</option>
                     </select>
                 </div>
 

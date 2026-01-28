@@ -13,6 +13,10 @@ mysql-connector-python==9.5.0
 
 # Web application (Flask for view analyzer)
 Flask==3.1.2
+Flask-Session==0.5.0
+
+# Security (encryption for passwords)
+cryptography>=42.0.0
 
 # Visualization (for view dependency graphs)
 graphviz==0.21

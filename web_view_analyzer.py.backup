@@ -14,13 +14,6 @@ from typing import Set, Dict, List, Optional
 from datetime import datetime
 from dotenv import load_dotenv
 from config_manager import get_config_manager
-from metadata_manager import MetadataManager
-from export_manager import ExportManager
-from flask import send_file
-import io
-
-from utils.cache import get_cache
-
 
 # 加载环境变量
 load_dotenv()
@@ -278,62 +271,8 @@ class ViewDependencyAnalyzer:
             print(f"保存注释失败: {e}")
             return False
 
-    def get_all_tables_and_views(self) -> List[Dict]:
-        """获取所有表和视图列表"""
-        conn = self.get_connection()
-        try:
-            cursor = conn.cursor()
-            query = """
-                SELECT TABLE_NAME, TABLE_TYPE, TABLE_COMMENT
-                FROM information_schema.TABLES
-                WHERE TABLE_SCHEMA = %s
-                ORDER BY TABLE_NAME
-            """
-            cursor.execute(query, (self.database,))
-            results = cursor.fetchall()
 
-            tables_and_views = []
-            for row in results:
-                table_name = row[0]
-                table_type = 'view' if row[1] == 'VIEW' else 'table'
-                table_comment = row[2] or ''
-
-                tables_and_views.append({
-                    'name': table_name,
-                    'type': table_type,
-                    'comment': table_comment
-                })
-
-            return tables_and_views
-        except Exception as e:
-            print(f"获取表和视图列表失败: {e}")
-            return []
-        finally:
-            conn.close()
-
-
-# ==================== 原有 API（修改为使用 get_analyzer）====================
-
-def get_analyzer() -> Optional[ViewDependencyAnalyzer]:
-    """
-    获取当前会话的 analyzer 实例
-
-    Returns:
-        ViewDependencyAnalyzer 实例，如果没有激活的配置则返回 None
-    """
-    config_id = session.get('active_config_id')
-    if not config_id:
-        return None
-
-    config_manager = get_config_manager()
-    config = config_manager.get_config_with_password(config_id)
-    if not config:
-        return None
-
-    # 更新最后使用时间
-    config_manager.update_last_used(config_id)
-
-    return ViewDependencyAnalyzer(config)
+analyzer = ViewDependencyAnalyzer(DB_CONFIG)
 
 
 @app.route('/')
@@ -345,10 +284,6 @@ def index():
 @app.route('/api/check_view', methods=['POST'])
 def check_view():
     """检查对象（表或视图）是否存在"""
-    analyzer = get_analyzer()
-    if not analyzer:
-        return jsonify({'error': '请先配置并激活数据库连接'}), 400
-
     data = request.json
     object_name = data.get('view_name', '').strip()  # 保持参数名兼容性
 
@@ -370,10 +305,6 @@ def check_view():
 @app.route('/api/dependencies', methods=['POST'])
 def get_dependencies():
     """获取对象的直接依赖"""
-    analyzer = get_analyzer()
-    if not analyzer:
-        return jsonify({'error': '请先配置并激活数据库连接'}), 400
-
     data = request.json
     object_name = data.get('view_name', '').strip()  # 保持参数名兼容性
 
@@ -396,10 +327,6 @@ def get_dependencies():
 @app.route('/api/table_structure', methods=['POST'])
 def get_table_structure():
     """获取表结构信息"""
-    analyzer = get_analyzer()
-    if not analyzer:
-        return jsonify({'error': '请先配置并激活数据库连接'}), 400
-
     data = request.json
     table_name = data.get('table_name', '').strip()
 
@@ -418,10 +345,6 @@ def get_table_structure():
 @app.route('/api/save_comments', methods=['POST'])
 def save_comments():
     """保存表和字段注释"""
-    analyzer = get_analyzer()
-    if not analyzer:
-        return jsonify({'error': '请先配置并激活数据库连接'}), 400
-
     data = request.json
     table_name = data.get('table_name', '').strip()
     table_comment = data.get('table_comment', '')
@@ -440,205 +363,11 @@ def save_comments():
         return jsonify({'error': str(e)}), 500
 
 
-# ==================== 配置管理 API ====================
-
-@app.route('/api/configs', methods=['GET'])
-def list_configs():
-    """获取所有配置列表"""
-    try:
-        config_manager = get_config_manager()
-        configs = config_manager.list_configs()
-        active_config_id = session.get('active_config_id')
-        return jsonify({
-            'success': True,
-            'configs': configs,
-            'active_config_id': active_config_id
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@app.route('/api/configs', methods=['POST'])
-def create_config():
-    """创建新配置"""
-    try:
-        data = request.json
-        config_manager = get_config_manager()
-
-        # 验证必填字段
-        required_fields = ['name', 'driver', 'host', 'port', 'database', 'user', 'password']
-        for field in required_fields:
-            if field not in data or not data[field]:
-                return jsonify({'success': False, 'error': f'缺少必填字段: {field}'}), 400
-
-        # 创建配置
-        config = config_manager.create_config(
-            name=data['name'],
-            driver=data['driver'],
-            host=data['host'],
-            port=int(data['port']),
-            database=data['database'],
-            user=data['user'],
-            password=data['password'],
-            catalog=data.get('catalog')
-        )
-
-        return jsonify({
-            'success': True,
-            'message': '配置创建成功',
-            'config': config_manager.get_config(config['id'])
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@app.route('/api/configs/<config_id>', methods=['PUT'])
-def update_config(config_id):
-    """更新配置"""
-    try:
-        data = request.json
-        config_manager = get_config_manager()
-
-        # 更新配置
-        config = config_manager.update_config(config_id, **data)
-
-        if config:
-            return jsonify({
-                'success': True,
-                'message': '配置更新成功',
-                'config': config
-            })
-        else:
-            return jsonify({'success': False, 'error': '配置不存在'}), 404
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@app.route('/api/configs/<config_id>', methods=['DELETE'])
-def delete_config(config_id):
-    """删除配置"""
-    try:
-        config_manager = get_config_manager()
-
-        # 如果删除的是当前激活的配置，清除 session
-        if session.get('active_config_id') == config_id:
-            session.pop('active_config_id', None)
-
-        success = config_manager.delete_config(config_id)
-
-        if success:
-            return jsonify({
-                'success': True,
-                'message': '配置删除成功'
-            })
-        else:
-            return jsonify({'success': False, 'error': '配置不存在'}), 404
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@app.route('/api/configs/<config_id>/activate', methods=['POST'])
-def activate_config(config_id):
-    """激活配置"""
-    try:
-        config_manager = get_config_manager()
-        config = config_manager.get_config(config_id)
-
-        if not config:
-            return jsonify({'success': False, 'error': '配置不存在'}), 404
-
-        # 设置为当前激活的配置
-        session['active_config_id'] = config_id
-        config_manager.update_last_used(config_id)
-
-        return jsonify({
-            'success': True,
-            'message': '配置已激活',
-            'config': config
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@app.route('/api/configs/test', methods=['POST'])
-def test_config_connection():
-    """测试数据库连接"""
-    try:
-        data = request.json
-        config_id = data.get('config_id')
-
-        if not config_id:
-            return jsonify({'success': False, 'message': '缺少配置ID'}), 400
-
-        config_manager = get_config_manager()
-        success, message = config_manager.test_connection(config_id)
-
-        return jsonify({
-            'success': success,
-            'message': message
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
-
-
-@app.route('/api/configs/active', methods=['GET'])
-def get_active_config():
-    """获取当前激活的配置"""
-    try:
-        config_id = session.get('active_config_id')
-        if not config_id:
-            return jsonify({'success': False, 'error': '未激活任何配置'}), 404
-
-        config_manager = get_config_manager()
-        config = config_manager.get_config(config_id)
-
-        if not config:
-            return jsonify({'success': False, 'error': '配置不存在'}), 404
-
-        return jsonify({
-            'success': True,
-            'config': config
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@app.route('/api/search_tables', methods=['GET'])
-def search_tables():
-    """搜索表和视图"""
-    analyzer = get_analyzer()
-    if not analyzer:
-        return jsonify({'error': '请先配置并激活数据库连接'}), 400
-
-    query = request.args.get('q', '').strip()
-
-    try:
-        # 获取所有表和视图
-        tables_and_views = analyzer.get_all_tables_and_views()
-
-        # 如果有搜索关键词，进行过滤
-        if query:
-            filtered = [
-                item for item in tables_and_views
-                if query.lower() in item['name'].lower()
-            ]
-        else:
-            filtered = tables_and_views
-
-        return jsonify({
-            'success': True,
-            'results': filtered,
-            'total': len(filtered)
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
 if __name__ == '__main__':
     print("=" * 60)
     print("StarRocks 视图依赖关系 Web 分析工具")
     print("=" * 60)
-    print("请通过 Web 界面配置数据库连接")
+    print(f"数据库: {DB_CONFIG['database']}")
     print(f"访问地址: http://localhost:5000")
     print("=" * 60)
     app.run(debug=True, host='0.0.0.0', port=5000)
