@@ -9,43 +9,17 @@
     "updated_at": "2026-01-28T20:38:03.316588"
   },
   "donggua.live_base_view": {
-    "table_comment": "aaaa",
+    "table_comment": "直播关联达人基础信息表",
     "column_comments": {
-      "id": "",
-      "live_create_time": "",
-      "anchor_id": "",
-      "cover_url": "",
-      "finish_time": "",
-      "is_show": "",
-      "title": "",
-      "top_user": "",
-      "total_user": "",
-      "contain_cart": "",
-      "follow_count": "",
-      "like_count": "",
-      "windmill_id": "",
-      "windmill_title": "",
-      "windmill_type": "xxxx",
-      "windmill_url": "",
-      "windmill_create_time": "",
-      "update_time": "",
-      "exposed_num": "",
-      "city": "",
-      "province": "",
-      "user_follow_count": "",
-      "user_name": "",
-      "user_head_logo": "",
-      "user_gender": "",
-      "first_tag_name": "",
-      "second_tag_name": "",
-      "product_num": "",
-      "sales_volume": "",
-      "saleroom": "",
-      "promotion_source": "",
-      "first_cid": "",
-      "second_cid": "",
-      "other": ""
+      "windmill_type": "xxxx"
     },
-    "updated_at": "2026-01-28T20:17:07.940370"
+    "updated_at": "2026-01-31T17:43:09.707452"
+  },
+  "donggua.live_base": {
+    "table_comment": "直播基础信息表",
+    "column_comments": {
+      "rtmp_pull_url": "RTMP流地址"
+    },
+    "updated_at": "2026-01-31T17:42:35.684084"
   }
 }

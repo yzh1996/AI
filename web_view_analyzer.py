@@ -605,30 +605,75 @@ def get_active_config():
 
 @app.route('/api/search_tables', methods=['GET'])
 def search_tables():
-    """搜索表和视图"""
+    """搜索表和视图 - 支持表名和注释模糊搜索"""
     analyzer = get_analyzer()
     if not analyzer:
         return jsonify({'error': '请先配置并激活数据库连接'}), 400
 
     query = request.args.get('q', '').strip()
+    limit = request.args.get('limit', 20, type=int)  # 默认返回20条
 
     try:
         # 获取所有表和视图
         tables_and_views = analyzer.get_all_tables_and_views()
 
-        # 如果有搜索关键词，进行过滤
+        # 加载自定义注释并合并
+        custom_comments = analyzer.comments
+        for item in tables_and_views:
+            table_key = f"{analyzer.database}.{item['name']}"
+            if table_key in custom_comments:
+                # 优先使用自定义注释
+                custom_comment = custom_comments[table_key].get('table_comment', '')
+                if custom_comment:
+                    item['comment'] = custom_comment
+                    item['comment_source'] = 'custom'
+                else:
+                    item['comment_source'] = 'db'
+            else:
+                item['comment_source'] = 'db'
+
+        # 如果有搜索关键词，进行过滤和评分
         if query:
-            filtered = [
-                item for item in tables_and_views
-                if query.lower() in item['name'].lower()
-            ]
+            filtered = []
+            query_lower = query.lower()
+
+            for item in tables_and_views:
+                # 搜索表名（英文）
+                name_match = query_lower in item['name'].lower()
+
+                # 搜索注释（中文或英文）
+                comment_match = query in item['comment'] if item['comment'] else False
+
+                if name_match or comment_match:
+                    # 计算匹配度分数（用于排序）
+                    score = 0
+                    if item['name'].lower().startswith(query_lower):
+                        score += 100  # 表名前缀匹配优先级最高
+                    elif name_match:
+                        score += 50   # 表名包含匹配
+
+                    if comment_match:
+                        if item['comment'].startswith(query):
+                            score += 30  # 注释前缀匹配
+                        else:
+                            score += 10  # 注释包含匹配
+
+                    item['match_score'] = score
+                    filtered.append(item)
+
+            # 按匹配度排序
+            filtered.sort(key=lambda x: x['match_score'], reverse=True)
+
+            # 限制返回数量
+            filtered = filtered[:limit]
         else:
-            filtered = tables_and_views
+            filtered = tables_and_views[:limit]
 
         return jsonify({
             'success': True,
             'results': filtered,
-            'total': len(filtered)
+            'total': len(filtered),
+            'has_more': len(tables_and_views) > limit if not query else False
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500

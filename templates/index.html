@@ -91,18 +91,29 @@
             margin-bottom: 20px;
         }
 
-        .search-box input {
+        /* 搜索框包装器 */
+        .search-wrapper {
+            position: relative;
             flex: 1;
+        }
+
+        .search-box input {
+            width: 100%;
             padding: 12px 20px;
             border: 2px solid #e0e0e0;
             border-radius: 8px;
             font-size: 16px;
-            transition: border-color 0.3s;
+            transition: border-color 0.3s, border-radius 0.3s;
         }
 
         .search-box input:focus {
             outline: none;
             border-color: #667eea;
+        }
+
+        .search-box input.has-suggestions {
+            border-radius: 8px 8px 0 0;
+            border-bottom-color: #e0e0e0;
         }
 
         .search-box button {
@@ -122,6 +133,108 @@
 
         .search-box button:active {
             transform: translateY(0);
+        }
+
+        /* 搜索建议下拉框 */
+        .search-suggestions {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 2px solid #667eea;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            max-height: 400px;
+            overflow-y: auto;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            z-index: 1000;
+            margin-top: -8px;
+        }
+
+        .search-suggestion-item {
+            padding: 12px 20px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+            transition: background-color 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .search-suggestion-item:last-child {
+            border-bottom: none;
+        }
+
+        .search-suggestion-item:hover,
+        .search-suggestion-item.selected {
+            background-color: #f0f0ff;
+        }
+
+        .search-suggestion-icon {
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .search-suggestion-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .search-suggestion-name {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 4px;
+            word-break: break-all;
+        }
+
+        .search-suggestion-comment {
+            font-size: 13px;
+            color: #666;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .search-suggestion-type {
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 10px;
+            background: #e0e0e0;
+            color: #666;
+            flex-shrink: 0;
+        }
+
+        .search-suggestion-type.view {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .search-suggestion-type.table {
+            background: #e8f5e9;
+            color: #388e3c;
+        }
+
+        .search-suggestion-empty {
+            padding: 20px;
+            text-align: center;
+            color: #999;
+            font-size: 14px;
+        }
+
+        .search-suggestion-loading {
+            padding: 20px;
+            text-align: center;
+            color: #667eea;
+            font-size: 14px;
+        }
+
+        /* 高亮匹配文本 */
+        .search-highlight {
+            background-color: #fff59d;
+            font-weight: 600;
+            padding: 0 2px;
+            border-radius: 2px;
         }
 
         .error-message {
@@ -454,8 +567,15 @@
                 </div>
                 <div class="panel-content">
                     <div class="search-box">
-                        <input type="text" id="viewNameInput" placeholder="请输入表或视图名称，例如：live_base_view 或 live_base" />
-                        <button onclick="analyzeView()">🔍</button>
+                        <div class="search-wrapper">
+                            <input type="text" id="viewNameInput" placeholder="请输入表名或注释关键词，例如：shop 或 小店" autocomplete="off" oninput="handleSearchInput()" onkeydown="handleSearchKeydown(event)" />
+                            <button onclick="analyzeView()">🔍</button>
+
+                            <!-- 搜索建议下拉框 -->
+                            <div id="searchSuggestions" class="search-suggestions" style="display: none;">
+                                <!-- 动态填充搜索建议 -->
+                            </div>
+                        </div>
                     </div>
 
                     <div id="errorMessage" class="error-message"></div>
@@ -859,10 +979,228 @@
             }
         }
 
-        // 回车键触发分析
-        document.getElementById('viewNameInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                analyzeView();
+        // ==================== 搜索建议功能 ====================
+        // 搜索相关变量
+        let searchTimeout = null;
+        let currentSuggestions = [];
+        let selectedSuggestionIndex = -1;
+        let isSearching = false;
+
+        // 处理搜索输入
+        async function handleSearchInput() {
+            const input = document.getElementById('viewNameInput');
+            const query = input.value.trim();
+            const suggestionsDiv = document.getElementById('searchSuggestions');
+
+            // 清除之前的定时器
+            if (searchTimeout) {
+                clearTimeout(searchTimeout);
+            }
+
+            // 如果输入为空，隐藏建议框
+            if (!query) {
+                hideSuggestions();
+                return;
+            }
+
+            // 添加样式类
+            input.classList.add('has-suggestions');
+
+            // 显示加载状态
+            suggestionsDiv.style.display = 'block';
+            suggestionsDiv.innerHTML = '<div class="search-suggestion-loading">搜索中...</div>';
+
+            // 防抖：延迟300ms后执行搜索
+            searchTimeout = setTimeout(async () => {
+                await performSearch(query);
+            }, 300);
+        }
+
+        // 执行搜索
+        async function performSearch(query) {
+            const suggestionsDiv = document.getElementById('searchSuggestions');
+
+            try {
+                isSearching = true;
+                const response = await fetch(`/api/search_tables?q=${encodeURIComponent(query)}&limit=20`);
+
+                if (!response.ok) {
+                    throw new Error('搜索失败');
+                }
+
+                const data = await response.json();
+                currentSuggestions = data.results || [];
+                selectedSuggestionIndex = -1;
+
+                renderSuggestions(query);
+
+            } catch (error) {
+                console.error('搜索错误:', error);
+                suggestionsDiv.innerHTML = '<div class="search-suggestion-empty">搜索失败，请重试</div>';
+            } finally {
+                isSearching = false;
+            }
+        }
+
+        // 渲染搜索建议
+        function renderSuggestions(query) {
+            const suggestionsDiv = document.getElementById('searchSuggestions');
+
+            if (currentSuggestions.length === 0) {
+                suggestionsDiv.innerHTML = '<div class="search-suggestion-empty">未找到匹配的表或视图</div>';
+                return;
+            }
+
+            let html = '';
+            currentSuggestions.forEach((item, index) => {
+                const icon = item.type === 'view' ? '📊' : '📋';
+                const typeLabel = item.type === 'view' ? '视图' : '表';
+                const comment = item.comment || '无注释';
+
+                // 高亮匹配的文本
+                const highlightedName = highlightMatch(item.name, query);
+                const highlightedComment = highlightMatch(comment, query);
+
+                html += `
+                    <div class="search-suggestion-item"
+                         data-index="${index}"
+                         onclick="selectSuggestion(${index})"
+                         onmouseenter="hoverSuggestion(${index})">
+                        <span class="search-suggestion-icon">${icon}</span>
+                        <div class="search-suggestion-content">
+                            <div class="search-suggestion-name">${highlightedName}</div>
+                            <div class="search-suggestion-comment">${highlightedComment}</div>
+                        </div>
+                        <span class="search-suggestion-type ${item.type}">${typeLabel}</span>
+                    </div>
+                `;
+            });
+
+            suggestionsDiv.innerHTML = html;
+        }
+
+        // 高亮匹配文本
+        function highlightMatch(text, query) {
+            if (!query || !text) return text;
+
+            // 转义特殊字符
+            const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const regex = new RegExp(`(${escapedQuery})`, 'gi');
+
+            return text.replace(regex, '<span class="search-highlight">$1</span>');
+        }
+
+        // 选择建议项
+        function selectSuggestion(index) {
+            if (index < 0 || index >= currentSuggestions.length) return;
+
+            const item = currentSuggestions[index];
+            const input = document.getElementById('viewNameInput');
+
+            // 设置输入框值
+            input.value = item.name;
+
+            // 隐藏建议框
+            hideSuggestions();
+
+            // 直接分析该表/视图
+            analyzeView();
+        }
+
+        // 鼠标悬停建议项
+        function hoverSuggestion(index) {
+            selectedSuggestionIndex = index;
+            updateSuggestionSelection();
+        }
+
+        // 更新建议项选中状态
+        function updateSuggestionSelection() {
+            const items = document.querySelectorAll('.search-suggestion-item');
+            items.forEach((item, index) => {
+                if (index === selectedSuggestionIndex) {
+                    item.classList.add('selected');
+                } else {
+                    item.classList.remove('selected');
+                }
+            });
+        }
+
+        // 处理键盘事件
+        function handleSearchKeydown(event) {
+            const suggestionsDiv = document.getElementById('searchSuggestions');
+
+            // 如果建议框未显示，只处理回车键
+            if (suggestionsDiv.style.display === 'none') {
+                if (event.key === 'Enter') {
+                    analyzeView();
+                }
+                return;
+            }
+
+            switch (event.key) {
+                case 'ArrowDown':
+                    event.preventDefault();
+                    selectedSuggestionIndex = Math.min(
+                        selectedSuggestionIndex + 1,
+                        currentSuggestions.length - 1
+                    );
+                    updateSuggestionSelection();
+                    scrollToSelectedSuggestion();
+                    break;
+
+                case 'ArrowUp':
+                    event.preventDefault();
+                    selectedSuggestionIndex = Math.max(selectedSuggestionIndex - 1, 0);
+                    updateSuggestionSelection();
+                    scrollToSelectedSuggestion();
+                    break;
+
+                case 'Enter':
+                    event.preventDefault();
+                    if (selectedSuggestionIndex >= 0) {
+                        selectSuggestion(selectedSuggestionIndex);
+                    } else {
+                        hideSuggestions();
+                        analyzeView();
+                    }
+                    break;
+
+                case 'Escape':
+                    event.preventDefault();
+                    hideSuggestions();
+                    break;
+            }
+        }
+
+        // 滚动到选中的建议项
+        function scrollToSelectedSuggestion() {
+            const suggestionsDiv = document.getElementById('searchSuggestions');
+            const selectedItem = suggestionsDiv.querySelector('.search-suggestion-item.selected');
+
+            if (selectedItem) {
+                selectedItem.scrollIntoView({
+                    block: 'nearest',
+                    behavior: 'smooth'
+                });
+            }
+        }
+
+        // 隐藏建议框
+        function hideSuggestions() {
+            const suggestionsDiv = document.getElementById('searchSuggestions');
+            const input = document.getElementById('viewNameInput');
+
+            suggestionsDiv.style.display = 'none';
+            input.classList.remove('has-suggestions');
+            currentSuggestions = [];
+            selectedSuggestionIndex = -1;
+        }
+
+        // 点击页面其他地方时隐藏建议框
+        document.addEventListener('click', function(event) {
+            const searchWrapper = document.querySelector('.search-wrapper');
+            if (searchWrapper && !searchWrapper.contains(event.target)) {
+                hideSuggestions();
             }
         });
 
